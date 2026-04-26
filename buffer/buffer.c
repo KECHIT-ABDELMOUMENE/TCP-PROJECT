@@ -7,58 +7,123 @@
 
 struct buffer {
 	int fd;
-	/* autres champs, à vous */
+	char *buf;
+	size_t buffsz;
+	int unget;
+	size_t start ;
+	size_t end;
+	int eof;
 };
 
 buffer *buff_create(int fd, size_t buffsz)
-{
-	/* pour éviter les warnings de variable non utilisée */
-	buffsz = fd = 0;
-	return NULL;
+{	buffer *b = malloc(sizeof(buffer));
+	if (b == NULL){
+		return NULL ;
+	}
+	b->fd =fd ;
+	b->buf = malloc(buffsz);
+	if(b->buf == NULL){
+		free(b);
+		return NULL ;
+	}
+	b->buffsz = buffsz;
+	b->unget = -1; //no char waiting
+	b->start = 0;
+	b->end = 0;
+	b->eof =0;
+	return b;
 }
 
 int buff_getc(buffer *b)
 {
-	/* pour éviter les warnings de variable non utilisée */
-	b = NULL;
-	return 0;
+	if (b->unget != -1){
+
+		int c = b->unget ;
+
+		b->unget =-1 ;
+
+		return c;
+
+	}
+
+	if (b->start == b->end){
+
+	ssize_t n= read(b->fd,b->buf,b->buffsz);
+
+	if (n <= 0){
+
+		b->eof = 1;
+
+		return EOF ;
+	}
+	b->start =0;
+	b->end = n;
+}
+return (unsigned char)b->buf[b->start++];
 }
 
 int buff_ungetc(buffer *b, int c)
-{
-	/* pour éviter les warnings de variable non utilisée */
-	b = NULL;
-	return c;
+{	b->unget =  c ;
+	return c ; 
 }
 
 void buff_free(buffer *b)
-{
-	/* pour éviter les warnings de variable non utilisée */
-	b = NULL;
+{	free(b->buf);
+	free(b);
 }
 
 int buff_eof(const buffer *buff)
-{
-	/* pour éviter les warnings de variable non utilisée */
-	return buff == NULL;
+{	
+	return buff->eof ;
 }
 
 int buff_ready(const buffer *buff)
-{
-	/* pour éviter les warnings de variable non utilisée */
-	return buff == NULL;
+{	
+	return buff->start <buff->end ;
 }
 
 char *buff_fgets(buffer *b, char *dest, size_t size)
-{
-	/* pour éviter les warnings de variable non utilisée */
-	b = NULL; size = 0;
-	return dest;
+{	int i;
+	for (i =0 ; i< size-1 ;i++){
+	int c = buff_getc(b);
+	if (c == EOF){
+		break;
+	}
+	dest[i]=c;
+	if (c == '\n'){ break ;}
+}
+dest[i]='\0';
+if (i ==0 && buff_eof(b)){
+	 return NULL ;
+}
+return dest ;
 }
 
 char *buff_fgets_crlf(buffer *b, char *dest, size_t size)
 {
-	/* pour éviter les warnings de variable non utilisée */
-	b = NULL; size = 0;
-	return dest;
+	int i ;
+	 for (i =0 ; i< size -1 ; i++){
+		int c = buff_getc(b);
+		if (c==EOF){
+			break;
+		}
+		dest[i]=c;
+		if(c=='\r'){
+			int next_char = buff_getc(b);
+			if (next_char == '\n' && i+1 <size -1){
+				i++;
+				dest[i]='\n';
+			}
+			else if (next_char != EOF){
+				buff_ungetc(b,next_char);
+			}
+			break ;
+	 }
+	}
+	 dest[i]='\0';
+	 if ( i==0 && buff_eof(b)){
+		return NULL ;
+	 }
+	 return dest ;
+
 }
