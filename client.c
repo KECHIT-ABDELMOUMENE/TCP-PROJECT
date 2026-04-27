@@ -25,16 +25,57 @@ int main(int argc, char *argv[])
 }
 	int fd_client = connect_serveur_tcp( argv[1] , PORT_FREESCORD);
 	if (fd_client == -1){
+
 		perror("connection to server");
+
 		return -1;
 	}
-	char buffer[1024];
-	ssize_t n;
-	while (fgets(buffer, sizeof(buffer), stdin) != NULL){
-		send(fd_client, buffer ,strlen(buffer), 0);
-		n =recv(fd_client, buffer, sizeof(buffer), 0);
-		write(1,buffer,n);
+
+
+	buffer *b = buff_create(fd_client, 1024);
+
+	struct pollfd fds[2];
+
+	fds[0].fd =0 ;
+
+	fds[0].events =POLLIN ;
+
+	fds[1].fd = fd_client;
+
+	fds[1].events =POLLIN;
+
+	char line[514];
+
+	while (1){
+
+		int timeout = buff_ready(b) ? 0: -1 ;
+
+		poll(fds ,2 , timeout);
+
+		if(fds[0].revents & POLLIN){
+			ssize_t n = read(0 ,line , sizeof(line)-1);
+			if (n<=0){ 
+				break ;
+			}
+			line[n]='\0';
+			lf_to_crlf(line);
+			send(fd_client, line, strlen(line),0);
+
+		}
+
+		if ((fds[1].revents & POLLIN) || buff_ready(b)){
+			if (buff_fgets_crlf(b,line,sizeof(line)) == NULL){
+				break ;
+			}
+			crlf_to_lf(line);
+			printf("%s",line);
+			fflush(stdout);
+		}
+
 	}
+
+	buff_free(b);
+
 	close(fd_client);
 	return 0;
 }

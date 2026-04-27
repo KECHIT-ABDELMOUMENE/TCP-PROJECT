@@ -10,6 +10,7 @@
 #include "user.h"
 #include<netinet/in.h>
 #include <string.h>
+#include "utils.h"
 #define PORT_FREESCORD 4321
 
 /** Gérer toutes les communications avec le client renseigné dans
@@ -18,19 +19,32 @@ void *handle_client(void *user);
 /** Créer et configurer une socket d'écoute sur le port donné en argument
  * retourne le descripteur de cette socket, ou -1 en cas d'erreur */
 int create_listening_sock(uint16_t port);
-
+void *repeater(void *arg);
+int tube[2];
+struct list *users;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER ;
 int main(int argc, char *argv[])
 {	
 	int fd_serveur = create_listening_sock(PORT_FREESCORD);
 	if(fd_serveur == -1){
 		return -1;
 	}
+	pipe(tube);
+	users = list_create();//pour creer une liste 
+	pthread_t r ;//r pour répéteur
+	pthread_create(&r,NULL,repeater,NULL);
+	pthread_detach(r);
+
 	while(1){
 	struct user *u = user_accept(fd_serveur);
 	if (u == NULL){
 		perror("ACCEPT");
 		continue ;
 	}
+	pthread_mutex_lock(&mutex);
+	list_add(users,u);
+	pthread_mutex_unlock(&mutex);
+	
 	pthread_t t;
 	pthread_create(&t,NULL, handle_client,u);
 	pthread_detach(t);
@@ -45,19 +59,32 @@ void *handle_client(void *clt)
 	char buffer[1024];
 	ssize_t n;
 	while((n=recv(u->sock ,buffer,sizeof(buffer),0))>0){
-		send(u->sock,buffer,n,0);
+		if (n>512){
+			continue ;
+		}
+
+		lf_to_crlf(buffer);
+		write(tube[1],buffer,strlen(buffer));
 	}
+
+	pthread_mutex_lock(&mutex);
+	list_remove_element(users,u);
+	pthread_mutex_unlock(&mutex);
 	user_free(u);
 	return NULL;
 }
 
 int create_listening_sock(uint16_t port)
 {
+
 	int fd= socket(AF_INET, SOCK_STREAM, 0);
+
 	if (fd== -1){
 		perror("socket");
 		return -1;
 	}
+	int p= 1;
+	setsockopt(fd,SOL_SOCKET,SO_REUSEADDR,&p, sizeof(p));
 
 	struct sockaddr_in addr;
 	memset(&addr,0,sizeof(addr));// pour éviter les problèmes de padding
@@ -76,4 +103,29 @@ int create_listening_sock(uint16_t port)
 		return -1;
 	}	
 	return fd;
+}
+
+void *repeater(void *arg){
+	char buffer[1024];
+	ssize_t n;
+	while ((n= read(tube[0],buffer, sizeof(buffer)))>0){
+
+		pthread_mutex_lock(&mutex);
+
+		struct node *curr = users->first;
+		
+		crlf_to_lf(buffer);
+		size_t len = strlen(buffer);
+
+  	for (; curr != NULL; curr = curr -> next) {
+
+		struct user *u = (struct user *)curr->elt;
+
+ 		send(u->sock,buffer,len,0);
+  	}
+
+		pthread_mutex_unlock(&mutex);
+	}
+
+	return NULL;
 }
