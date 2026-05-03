@@ -11,6 +11,7 @@
 #include<netinet/in.h>
 #include <string.h>
 #include "utils.h"
+#include "badwords.h"
 #define PORT_FREESCORD 4321
 
 /** Gérer toutes les communications avec le client renseigné dans
@@ -58,13 +59,72 @@ void *handle_client(void *clt)
 	struct user *u =(struct user *)clt ; 
 	char buffer[1024];
 	ssize_t n;
+
+	send(u->sock,"Bienvenue sur Freescord !\r\n", 27,0);
+
+	send(u->sock, "\r\n", 2, 0);
+
+	while(1){
+		memset(buffer,0,sizeof(buffer));
+		n=recv(u->sock ,buffer,sizeof(buffer),0);
+		if (n<=0){
+			break ;
+		}
+
+		crlf_to_lf(buffer);
+
+		buffer[strcspn(buffer,"\n")]='\0';
+		
+		if(strncmp(buffer ,"nickname ",9) !=0){
+			send(u->sock,"3 la commande ne commence pas par nickname\r\n",43,0);
+			continue;
+		}
+		char *pseudonyme = buffer + 9;
+		if(strlen(pseudonyme) >16){
+			send(u->sock,"2 le nickname est troplong\r\n",28,0);
+			continue;
+		}
+		if(strchr(pseudonyme, ':')){
+			send(u->sock ,"2 Nickname is forbidden\r\n",25,0);
+			continue;
+		}
+
+		if (is_badword(pseudonyme)) { 
+    	send(u->sock, "2 Nickname is forbidden\r\n", 25, 0); 
+    	continue; 
+		}
+		int tmp=0;
+		pthread_mutex_lock(&mutex);
+		
+		for(struct node *current = users->first ; current != NULL; current = current->next){
+			struct user *other_user_nickname = current->elt;
+			if (other_user_nickname != u && strcmp(other_user_nickname->nickname, pseudonyme) == 0) {
+				tmp = 1;
+				break;
+			}
+		}
+
+		pthread_mutex_unlock(&mutex);
+		if(tmp){
+			send(u->sock,"1 Nickname is already used\r\n",29,0);
+			continue;
+		}
+		strncpy(u->nickname,pseudonyme,16);
+		u->nickname[16] = '\0';
+		send(u->sock,"0 Nickname accepted\r\n",21,0);
+		break;
+	}
+	
 	while((n=recv(u->sock ,buffer,sizeof(buffer),0))>0){
 		if (n>512){
 			continue ;
 		}
-
-		lf_to_crlf(buffer);
-		write(tube[1],buffer,strlen(buffer));
+		buffer[n]='\0';
+		crlf_to_lf(buffer);
+		char message[1100];
+		snprintf(message,sizeof(message),"%s: %s",u->nickname,buffer);
+		lf_to_crlf(message);
+		write(tube[1],message,strlen(message));
 	}
 
 	pthread_mutex_lock(&mutex);
@@ -108,13 +168,14 @@ int create_listening_sock(uint16_t port)
 void *repeater(void *arg){
 	char buffer[1024];
 	ssize_t n;
-	while ((n= read(tube[0],buffer, sizeof(buffer)))>0){
+	while ((n= read(tube[0],buffer, sizeof(buffer)-1))>0){
 
+		buffer[n]='\0';
+		
 		pthread_mutex_lock(&mutex);
 
 		struct node *curr = users->first;
 		
-		crlf_to_lf(buffer);
 		size_t len = strlen(buffer);
 
   	for (; curr != NULL; curr = curr -> next) {

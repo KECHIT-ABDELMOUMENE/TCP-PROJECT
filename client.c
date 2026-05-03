@@ -33,7 +33,44 @@ int main(int argc, char *argv[])
 
 
 	buffer *b = buff_create(fd_client, 1024);
+	
+	char line[514];
 
+	while (buff_fgets_crlf(b,line,sizeof(line))!=NULL){
+		crlf_to_lf(line);
+	 
+		 if(line[0] == '\n' || line[0] == '\0' || line[0] == '\r'){
+        break;
+		 }
+		printf("%s",line);
+		
+		fflush(stdout);
+	}
+	
+	printf("\nEnter your nickname: \n");
+
+	fflush(stdout);
+	while(1){
+		fgets(line,sizeof(line),stdin);
+		line[strcspn(line,"\n")]='\0';
+
+		char pseaudo[530];
+		snprintf(pseaudo,sizeof(pseaudo), "nickname %s\r\n", line);
+		send(fd_client, pseaudo, strlen(pseaudo),0);
+
+		if(buff_fgets_crlf(b,line,sizeof(line))==NULL){
+			break ;
+		}
+		crlf_to_lf(line);
+		printf("%s",line);
+		fflush(stdout);
+
+		if(line[0] == '0'){
+			break ;
+		}
+		printf("TRY AGAIN: ");
+		fflush(stdout);
+	}
 	struct pollfd fds[2];
 
 	fds[0].fd =0 ;
@@ -43,8 +80,6 @@ int main(int argc, char *argv[])
 	fds[1].fd = fd_client;
 
 	fds[1].events =POLLIN;
-
-	char line[514];
 
 	while (1){
 
@@ -68,7 +103,7 @@ int main(int argc, char *argv[])
 				break ;
 			}
 			crlf_to_lf(line);
-			printf("%s",line);
+			printf("\n%s",line);
 			fflush(stdout);
 		}
 

@@ -7,7 +7,7 @@ struct user {
 	struct sockaddr *address;
 	socklen_t addr_len;
 	int sock;
-	/* autres champs éventuels */
+	char nickname[17];  
 };
 
 struct user *user_accept(int sl);
