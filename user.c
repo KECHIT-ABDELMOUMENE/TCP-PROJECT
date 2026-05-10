@@ -1,3 +1,8 @@
+
+/* ABDELMOUMENE KECHIT 12509386
+Je déclare qu'il s'agit de mon propre travail.
+Ce travail a été réalisé intégralement par un être humain. */
+
 #include "user.h"
 #include <stdlib.h>
 #include <string.h>

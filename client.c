@@ -1,3 +1,7 @@
+
+/* ABDELMOUMENE KECHIT 12509386
+Je déclare qu'il s'agit de mon propre travail.
+Ce travail a été réalisé intégralement par un être humain. */
 #include <unistd.h>
 #include <sys/socket.h>
 #include <fcntl.h>
